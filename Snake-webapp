@@ -1,0 +1,93 @@
+#include <SDL.h>
+#include <vector>
+
+const int WIDTH = 600;
+const int HEIGHT = 600;
+const int GRID = 20;
+
+struct Point {
+int x, y;
+};
+
+int main() {
+SDL_Init(SDL_INIT_VIDEO);
+
+SDL_Window* window = SDL_CreateWindow("Snake WASM",
+SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+WIDTH, HEIGHT, SDL_WINDOW_SHOWN);
+
+SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 0);
+
+std::vector<Point> snake = { {WIDTH / 2, HEIGHT / 2} };
+Point food = { 200, 200 };
+int dx = GRID, dy = 0;
+Uint32 lastMove = 0;
+
+bool running = true;
+SDL_Event event;
+
+while (running) {
+while (SDL_PollEvent(&event)) {
+if (event.type == SDL_QUIT) running = false;
+
+if (event.type == SDL_KEYDOWN) {
+switch (event.key.keysym.sym) {
+case SDLK_LEFT: dx = -GRID; dy = 0; break;
+case SDLK_RIGHT: dx = GRID; dy = 0; break;
+case SDLK_UP: dy = -GRID; dx = 0; break;
+case SDLK_DOWN: dy = GRID; dx = 0; break;
+}
+}
+}
+
+Uint32 now = SDL_GetTicks();
+if (now - lastMove > 120) {
+lastMove = now;
+
+Point newHead = snake[0];
+newHead.x += dx;
+newHead.y += dy;
+
+// wrap around
+if (newHead.x < 0) newHead.x = WIDTH - GRID;
+if (newHead.x >= WIDTH) newHead.x = 0;
+if (newHead.y < 0) newHead.y = HEIGHT - GRID;
+if (newHead.y >= HEIGHT) newHead.y = 0;
+
+snake.insert(snake.begin(), newHead);
+
+if (newHead.x == food.x && newHead.y == food.y) {
+food.x = (rand() % (WIDTH / GRID)) * GRID;
+food.y = (rand() % (HEIGHT / GRID)) * GRID;
+} else {
+snake.pop_back();
+}
+
+// render
+SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+SDL_RenderClear(renderer);
+
+// snake
+for (auto& s : snake) {
+SDL_Rect r = { s.x, s.y, GRID, GRID };
+SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+SDL_RenderFillRect(renderer, &r);
+}
+
+// food
+SDL_Rect f = { food.x, food.y, GRID, GRID };
+SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+SDL_RenderFillRect(renderer, &f);
+
+SDL_RenderPresent(renderer);
+}
+}
+
+SDL_DestroyRenderer(renderer);
+SDL_DestroyWindow(window);
+SDL_Quit();
+return 0;
+}
+
+
+}
