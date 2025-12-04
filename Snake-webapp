@@ -1,5 +1,6 @@
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #include <vector>
+#include <emscripten.h> // ← REQUIRED for browser execution
 
 const int WIDTH = 600;
 const int HEIGHT = 600;
@@ -9,37 +10,36 @@ struct Point {
 int x, y;
 };
 
-int main() {
-SDL_Init(SDL_INIT_VIDEO);
-
-SDL_Window* window = SDL_CreateWindow("Snake WASM",
-SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-WIDTH, HEIGHT, SDL_WINDOW_SHOWN);
-
-SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, 0);
-
-std::vector<Point> snake = { {WIDTH / 2, HEIGHT / 2} };
-Point food = { 200, 200 };
+// Make variables global so they persist between frames
+SDL_Window* window;
+SDL_Renderer* renderer;
+std::vector<Point> snake;
+Point food;
 int dx = GRID, dy = 0;
 Uint32 lastMove = 0;
-
 bool running = true;
+
+void main_loop() {
 SDL_Event event;
 
-while (running) {
+// 1. Handle events (this runs every frame)
 while (SDL_PollEvent(&event)) {
-if (event.type == SDL_QUIT) running = false;
+if (event.type == SDL_QUIT) {
+running = false;
+emscripten_cancel_main_loop(); // Stop the browser loop
+}
 
 if (event.type == SDL_KEYDOWN) {
 switch (event.key.keysym.sym) {
-case SDLK_LEFT: dx = -GRID; dy = 0; break;
-case SDLK_RIGHT: dx = GRID; dy = 0; break;
-case SDLK_UP: dy = -GRID; dx = 0; break;
-case SDLK_DOWN: dy = GRID; dx = 0; break;
+case SDLK_LEFT: if (dx == 0) { dx = -GRID; dy = 0; } break;
+case SDLK_RIGHT: if (dx == 0) { dx = GRID; dy = 0; } break;
+case SDLK_UP: if (dy == 0) { dy = -GRID; dx = 0; } break;
+case SDLK_DOWN: if (dy == 0) { dy = GRID; dx = 0; } break;
 }
 }
 }
 
+// 2. Update game state (only every 120ms for consistent speed)
 Uint32 now = SDL_GetTicks();
 if (now - lastMove > 120) {
 lastMove = now;
@@ -48,7 +48,7 @@ Point newHead = snake[0];
 newHead.x += dx;
 newHead.y += dy;
 
-// wrap around
+// Wrap around
 if (newHead.x < 0) newHead.x = WIDTH - GRID;
 if (newHead.x >= WIDTH) newHead.x = 0;
 if (newHead.y < 0) newHead.y = HEIGHT - GRID;
@@ -63,18 +63,18 @@ food.y = (rand() % (HEIGHT / GRID)) * GRID;
 snake.pop_back();
 }
 
-// render
+// 3. Render
 SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
 SDL_RenderClear(renderer);
 
-// snake
+// Draw snake
 for (auto& s : snake) {
 SDL_Rect r = { s.x, s.y, GRID, GRID };
 SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
 SDL_RenderFillRect(renderer, &r);
 }
 
-// food
+// Draw food
 SDL_Rect f = { food.x, food.y, GRID, GRID };
 SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
 SDL_RenderFillRect(renderer, &f);
@@ -83,11 +83,28 @@ SDL_RenderPresent(renderer);
 }
 }
 
-SDL_DestroyRenderer(renderer);
-SDL_DestroyWindow(window);
-SDL_Quit();
+int main() {
+SDL_Init(SDL_INIT_VIDEO);
+
+window = SDL_CreateWindow("Snake WASM",
+SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+WIDTH, HEIGHT, SDL_WINDOW_SHOWN);
+
+renderer = SDL_CreateRenderer(window, -1, 0);
+
+// Initialize snake in middle
+snake = { {WIDTH / 2, HEIGHT / 2} };
+
+// Initialize first food
+food = { 200, 200 };
+
+// Seed random for food placement
+srand(SDL_GetTicks());
+
+// THE KEY FIX: Use Emscripten's browser-friendly main loop
+// This calls main_loop() repeatedly without blocking the browser
+emscripten_set_main_loop(main_loop, 0, 1);
+
+// Note: We don't return here - the loop runs until cancelled
 return 0;
 }
-
-
-
